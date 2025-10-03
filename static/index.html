@@ -1,82 +1,371 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>MemoryMap</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <style>
-      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 720px; }
-      form, .card { border: 1px solid #ddd; padding: 1rem; border-radius: 12px; margin-bottom: 1rem; }
-      input, textarea, button { width: 100%; margin-top: .5rem; padding: .6rem; }
-      h1 { margin-top: 0; }
-      .row { display: grid; grid-template-columns: 1fr; gap: .75rem; }
-      .muted { color: #666; font-size: .9rem; }
-    </style>
-  </head>
-  <body>
-    <h1>MemoryMap</h1>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Memory Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{
+      --bg:#f8fafc; --text:#0a0a0a; --muted:#6b7280;
+      --panel:#ffffff; --border:#e5e7eb; --shadow:0 14px 40px rgba(0,0,0,.08);
+      --radius:16px; --black:#111111; --hit:40px; --dot:14px;
+      --sidebarW:360px; --padX:64px; --padY:56px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;height:100%}
+    #app{display:grid;grid-template-columns:minmax(0,1fr) var(--sidebarW);height:100vh;overflow:hidden}
 
-    <form id="create-form">
-      <h3>Create a Memory</h3>
-      <div class="row">
-        <input id="title" placeholder="Title" required />
-        <textarea id="body" placeholder="Write something..." rows="4" required></textarea>
-        <button type="submit">Save</button>
+    /* Timeline (full viewport left) */
+    .timeline-area{position:relative;overflow:hidden}
+    .watermark{
+      position:absolute;left:50%;top:12%;transform:translateX(-50%);pointer-events:none;z-index:1;
+      opacity:.08;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);
+      font-size:clamp(42px,8vw,110px)
+    }
+    .canvas{position:absolute;inset:0}
+    .svg{width:100%;height:100%;display:block}
+
+    /* Start/End chips */
+    .chip{
+      position:absolute;transform:translate(-50%,-50%);z-index:3;background:#fff;border:1px solid var(--border);
+      border-radius:999px;padding:6px 10px;font-size:13px;color:var(--muted);box-shadow:var(--shadow);white-space:nowrap
+    }
+
+    /* Markers + labels */
+    .marker,.label{position:absolute;transform:translate(-50%,-50%);z-index:4}
+    .marker{
+      width:var(--hit);height:var(--hit);border-radius:50%;background:transparent;border:none;cursor:pointer;outline:none;
+      display:flex;align-items:center;justify-content:center
+    }
+    .marker:focus-visible{box-shadow:0 0 0 3px rgba(0,0,0,.25)}
+    .dot{
+      width:var(--dot);height:var(--dot);border-radius:50%;background:#fff;border:4px solid var(--black);
+      box-shadow:0 6px 16px rgba(0,0,0,.15)
+    }
+    .label{
+      transform:translate(-50%, -135%);background:var(--panel);border:1px solid var(--border);
+      border-radius:12px;padding:8px 12px;font-weight:800;font-size:14px;white-space:nowrap;cursor:pointer;box-shadow:var(--shadow)
+    }
+    .label.bottom{ transform:translate(-50%, 135%); }
+
+    /* Sidebar (always visible) */
+    .sidebar{height:100vh;background:var(--panel);border-left:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:5}
+    .sidecard{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+    .sidecard h3{margin:0 0 10px 0}
+    .network{display:grid;grid-template-columns:1fr;gap:12px}
+    .node{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
+    .node .top{display:flex;gap:10px;align-items:center}
+    .node .av{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#111,#444)}
+    .node .name{font-weight:800}
+    .node .role{font-size:12px;color:var(--muted)}
+    .node .btn{margin-top:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#111;color:#fff;font-weight:700;cursor:pointer}
+
+    .profile{display:flex;gap:12px;align-items:center}
+    .avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#111,#444)}
+    .muted{color:var(--muted);font-size:13px}
+
+    .add-btn{position:sticky;top:0;z-index:6;margin:-8px -8px 8px -8px;padding:12px;border:0;border-bottom:1px solid var(--border);background:#fff;border-radius:12px;font-weight:800;cursor:pointer}
+
+    /* Modals */
+    .backdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:50;padding:20px}
+    .modal{width:clamp(320px,86vw,760px);background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+    .modal header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)}
+    .modal h2{margin:0;font-size:22px}
+    .modal .content{padding:18px}
+    .close{background:#f3f4f6;border:1px solid var(--border);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .form-grid{display:grid;grid-template-columns:1fr;gap:12px}
+    input[type="text"],input[type="datetime-local"],textarea,.filebox,.btn{
+      width:100%;border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:16px;outline:none;background:#fff
+    }
+    textarea{resize:vertical;min-height:110px}
+    .filebox{display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:#fafafa}
+    .btn{background:#111;color:#fff;border:none;font-weight:800;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .meta{font-size:13px;color:var(--muted);margin-bottom:6px}
+    .img{width:100%;max-height:520px;object-fit:cover;border-radius:12px;margin:10px 0}
+
+    @media (max-width: 980px){ :root{ --sidebarW: 300px; } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Timeline -->
+    <section class="timeline-area">
+      <div class="watermark">Memory Map</div>
+      <div class="canvas"><svg id="tl" class="svg" aria-hidden="true"></svg></div>
+      <div id="startChip" class="chip">START OF MEMORIES</div>
+      <div id="endChip" class="chip">CURRENT</div>
+    </section>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <button id="openCreate" class="add-btn">＋ Add Memory</button>
+
+      <div class="sidecard">
+        <h3>Family & Caregivers</h3>
+        <div class="network">
+          <div class="node">
+            <div class="top"><div class="av"></div><div><div class="name">Maria G.</div><div class="role">Daughter • Primary</div></div></div>
+            <button class="btn">Message</button>
+          </div>
+          <div class="node">
+            <div class="top"><div class="av"></div><div><div class="name">Kevin P.</div><div class="role">Neighbor • Backup</div></div></div>
+            <button class="btn">Message</button>
+          </div>
+          <div class="node">
+            <div class="top"><div class="av"></div><div><div class="name">Emma R.</div><div class="role">Nurse • Weekly</div></div></div>
+            <button class="btn">Message</button>
+          </div>
+        </div>
       </div>
-    </form>
 
-    <div class="card">
-      <h3>Memories</h3>
-      <div id="memories" class="row"></div>
-      <div id="empty" class="muted"></div>
+      <div class="sidecard">
+        <h3>Profile</h3>
+        <div class="profile">
+          <div class="avatar"></div>
+          <div>
+            <div style="font-weight:900;">Alex Johnson</div>
+            <div class="muted">Age 72 • Boston, MA</div>
+          </div>
+        </div>
+        <div style="height:8px"></div>
+        <div class="muted">Reminders On · 3 family members linked · Care Plan: Basic</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Create Memory Modal -->
+  <div id="createBackdrop" class="backdrop" role="dialog" aria-modal="true" aria-labelledby="cr-title">
+    <div class="modal">
+      <header><h2 id="cr-title">Create Memory</h2><button id="cr-close" class="close">Close</button></header>
+      <div class="content">
+        <form id="createForm" class="form-grid">
+          <input id="cr-title-input" type="text" placeholder="Title" required/>
+          <textarea id="cr-note-input" placeholder="Notes (optional)"></textarea>
+          <label class="filebox" for="cr-img"><span id="cr-fileLabel">Attach image (optional)</span><strong>Browse</strong></label>
+          <input id="cr-img" type="file" accept="image/*" style="display:none"/>
+          <label class="meta">Occurred at (your local time)</label>
+          <input id="cr-occurred" type="datetime-local" required/>
+          <button class="btn" type="submit">Save</button>
+        </form>
+      </div>
     </div>
+  </div>
 
-    <script>
-      const API = location.origin;
+  <!-- View Memory Modal -->
+  <div id="viewBackdrop" class="backdrop" role="dialog" aria-modal="true" aria-labelledby="vw-title">
+    <div class="modal">
+      <header><h2 id="vw-title">Memory</h2><button id="vw-close" class="close">Close</button></header>
+      <div class="content">
+        <div id="vw-meta" class="meta"></div>
+        <img id="vw-img" class="img" alt="" style="display:none"/>
+        <div id="vw-note"></div>
+      </div>
+    </div>
+  </div>
 
-      async function listMemories() {
-        const res = await fetch(`${API}/memories`);
-        const data = await res.json();
-        const wrap = document.getElementById("memories");
-        const empty = document.getElementById("empty");
-        wrap.innerHTML = "";
-        if (!data.length) {
-          empty.textContent = "No memories yet — create your first one above.";
-          return;
-        }
-        empty.textContent = "";
-        for (const m of data) {
-          const el = document.createElement("div");
-          el.className = "card";
-          el.innerHTML = `<strong>${m.title}</strong>
-                          <div class="muted">${new Date(m.timestamp).toLocaleString()}</div>
-                          <p>${m.body}</p>`;
-          wrap.appendChild(el);
-        }
+  <span class="sr-only" id="live" aria-live="polite"></span>
+
+  <script>
+    const API = location.origin;
+    let MEMS = [];
+
+    // ---- Utilities ----
+    function setNow(el){
+      const dt = new Date(); dt.setSeconds(0,0);
+      const tz = dt.getTimezoneOffset();
+      const local = new Date(dt.getTime() - tz*60000);
+      el.value = local.toISOString().slice(0,16);
+    }
+    function fmtFull(s){
+      const d = new Date(s);
+      return d.toLocaleString([], {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    }
+    function escapeHtml(str){ return (str||"").replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+    function announce(m){ document.getElementById("live").textContent = m; }
+
+    // ---- Data ----
+    async function fetchMemories(){
+      const r = await fetch(`${API}/memories`);
+      const data = await r.json();
+      data.sort((a,b)=> new Date(a.occurred_at) - new Date(b.occurred_at)); // chronological
+      return data;
+    }
+
+    // ---- Smooth serpentine parametric curve ----
+    // t in [0,1] from top to bottom; x oscillates smoothly left<->right with odd number of half-turns.
+    function serpentineCoord(t, width, height, rows){
+      const padX = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--padX'));
+      const padY = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--padY'));
+      const left = padX, right = width - padX;
+      const top = padY, bottom = height - padY;
+
+      // Ensure we end on the right: need an odd number of half-turns ("turns")
+      let turns = Math.max(3, rows - 1); // at least 3 half-turns
+      if (turns % 2 === 0) turns += 1;
+
+      const y = top + t * (bottom - top);
+      // phase -π/2 -> starts at left; with odd 'turns', ends at right
+      const xNorm = (Math.sin(Math.PI * turns * t - Math.PI/2) + 1) / 2; // 0..1
+      const x = left + xNorm * (right - left);
+      return { x, y };
+    }
+
+    function buildPathD(width, height, rows, samples=400){
+      const p0 = serpentineCoord(0, width, height, rows);
+      let d = `M ${p0.x} ${p0.y}`;
+      for (let i=1;i<=samples;i++){
+        const t = i / samples;
+        const p = serpentineCoord(t, width, height, rows);
+        d += ` L ${p.x} ${p.y}`;
+      }
+      return d;
+    }
+
+    // ---- Render ----
+    async function render(){
+      MEMS = await fetchMemories();
+
+      const svg = document.getElementById("tl");
+      const area = document.querySelector(".timeline-area");
+      const { width, height } = area.getBoundingClientRect();
+
+      // Pick a pleasant row count based on height, then enforce odd half-turns
+      let rows = Math.max(4, Math.min(8, Math.round(height / 140)));
+
+      // Draw smooth path
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const d = buildPathD(width, height, rows, 500);
+      svg.innerHTML = `
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".18"/>
+          </filter>
+        </defs>
+        <path d="${d}" fill="none" stroke="var(--black)" stroke-width="6" filter="url(#shadow)"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      `;
+
+      // Place START/CURRENT chips
+      const start = serpentineCoord(0, width, height, rows);
+      const end   = serpentineCoord(1, width, height, rows);
+      const startChip = document.getElementById("startChip");
+      const endChip = document.getElementById("endChip");
+      startChip.textContent = "START OF MEMORIES";
+      endChip.textContent = "CURRENT";
+      startChip.style.left = `${start.x}px`; startChip.style.top = `${start.y - 22}px`;
+      endChip.style.left   = `${end.x}px`;   endChip.style.top  = `${end.y + 22}px`;
+
+      // Remove old markers/labels
+      [...area.querySelectorAll(".marker,.label")].forEach(el=>el.remove());
+
+      if (!MEMS.length) return;
+
+      // Map memories to t in [margin .. 1-margin], so first is slightly away from start.
+      const START_MARGIN = 0.05;  // 5% away from start
+      const END_MARGIN   = 0.03;  // keep a little space before CURRENT
+
+      const times = MEMS.map(m => +new Date(m.occurred_at));
+      const tMin = Math.min(...times), tMax = Math.max(...times);
+      const range = Math.max(1, tMax - tMin);
+
+      MEMS.forEach((m, i) => {
+        const base = (tMax === tMin) ? (i / Math.max(1, MEMS.length - 1)) : ((+new Date(m.occurred_at) - tMin) / range);
+        const t = START_MARGIN + base * (1 - START_MARGIN - END_MARGIN);
+        const p = serpentineCoord(t, width, height, rows);
+
+        // Marker
+        const btn = document.createElement("button");
+        btn.className = "marker";
+        btn.style.left = `${p.x}px`; btn.style.top = `${p.y}px`;
+        btn.setAttribute("aria-label", `Open memory: ${m.title}`);
+        btn.innerHTML = `<div class="dot"></div>`;
+        btn.addEventListener("click", ()=> openView(i));
+        btn.addEventListener("keydown", ev=>{ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openView(i); }});
+        area.appendChild(btn);
+
+        // Label (alternate above/below)
+        const lab = document.createElement("div");
+        lab.className = "label " + (i % 2 ? "bottom" : "");
+        lab.style.left = `${p.x}px`; lab.style.top = `${p.y}px`;
+        lab.textContent = m.title;
+        lab.title = "Open memory"; lab.tabIndex = 0;
+        lab.addEventListener("click", ()=> openView(i));
+        lab.addEventListener("keydown", ev=>{ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openView(i); }});
+        area.appendChild(lab);
+      });
+    }
+
+    // ---- Create Modal ----
+    const openCreateBtn = document.getElementById("openCreate");
+    const crBackdrop = document.getElementById("createBackdrop");
+    const crClose = document.getElementById("cr-close");
+    const crForm = document.getElementById("createForm");
+    const crWhen = document.getElementById("cr-occurred");
+    const crImg = document.getElementById("cr-img");
+    const crFileLabel = document.getElementById("cr-fileLabel");
+
+    function openCreate(){ setNow(crWhen); crBackdrop.style.display="flex"; document.getElementById("cr-title-input").focus(); }
+    openCreateBtn.addEventListener("click", openCreate);
+    crClose.addEventListener("click", ()=> crBackdrop.style.display="none");
+    crBackdrop.addEventListener("click", e=>{ if(e.target===crBackdrop) crBackdrop.style.display="none"; });
+    crImg.addEventListener("change", ()=>{ crFileLabel.textContent = crImg.files[0] ? crImg.files[0].name : "Attach image (optional)"; });
+
+    crForm.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const title = document.getElementById("cr-title-input").value.trim();
+      const note = document.getElementById("cr-note-input").value.trim();
+      const whenLocal = crWhen.value;
+      if (!title || !whenLocal) return;
+
+      const occurred_at = new Date(whenLocal).toISOString();
+
+      // optional image upload
+      let image_url = null;
+      if (crImg.files[0]){
+        const fd = new FormData(); fd.append("file", crImg.files[0]);
+        const up = await fetch(`${API}/upload`, { method:"POST", body:fd });
+        if(!up.ok){ alert("Image upload failed: " + await up.text()); return; }
+        image_url = (await up.json()).url;
       }
 
-      document.getElementById("create-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const title = document.getElementById("title").value.trim();
-        const body = document.getElementById("body").value.trim();
-        if (!title || !body) return;
-
-        const res = await fetch(`${API}/memories`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, body })
-        });
-
-        if (!res.ok) {
-          alert("Failed to save memory");
-          return;
-        }
-        document.getElementById("title").value = "";
-        document.getElementById("body").value = "";
-        await listMemories();
+      const res = await fetch(`${API}/memories`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ title, note: note || null, image_url, occurred_at })
       });
+      if(!res.ok){ alert("Save failed: " + await res.text()); return; }
 
-      listMemories();
-    </script>
-  </body>
+      crBackdrop.style.display="none";
+      crForm.reset(); crFileLabel.textContent = "Attach image (optional)";
+      announce("Memory saved");
+      await render();
+    });
+
+    // ---- View Modal ----
+    const vwBackdrop = document.getElementById("viewBackdrop");
+    const vwClose = document.getElementById("vw-close");
+    function openView(i){
+      const m = MEMS[i];
+      document.getElementById("vw-title").textContent = m.title;
+      document.getElementById("vw-meta").textContent = `Occurred: ${fmtFull(m.occurred_at)} • Saved: ${fmtFull(m.created_at)}`;
+      const img = document.getElementById("vw-img");
+      if(m.image_url){ img.src = m.image_url; img.style.display="block"; img.alt = m.title || "Memory image"; }
+      else { img.removeAttribute("src"); img.style.display="none"; }
+      document.getElementById("vw-note").innerHTML = m.note ? escapeHtml(m.note) : "<span class='muted'>No note</span>";
+      vwBackdrop.style.display = "flex";
+      vwClose.focus();
+    }
+    function closeView(){ vwBackdrop.style.display = "none"; }
+    vwClose.addEventListener("click", closeView);
+    vwBackdrop.addEventListener("click", e=>{ if(e.target===vwBackdrop) closeView(); });
+    document.addEventListener("keydown", e=>{ if(e.key==="Escape" && vwBackdrop.style.display==="flex") closeView(); });
+
+    // ---- Init ----
+    render();
+    window.addEventListener("resize", debounce(render, 120));
+    setInterval(render, 30000);
+    function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a), wait); }; }
+  </script>
+</body>
 </html>
