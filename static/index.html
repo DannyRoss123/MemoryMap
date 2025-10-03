@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>MemoryMap</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 720px; }
+      form, .card { border: 1px solid #ddd; padding: 1rem; border-radius: 12px; margin-bottom: 1rem; }
+      input, textarea, button { width: 100%; margin-top: .5rem; padding: .6rem; }
+      h1 { margin-top: 0; }
+      .row { display: grid; grid-template-columns: 1fr; gap: .75rem; }
+      .muted { color: #666; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <h1>MemoryMap</h1>
+
+    <form id="create-form">
+      <h3>Create a Memory</h3>
+      <div class="row">
+        <input id="title" placeholder="Title" required />
+        <textarea id="body" placeholder="Write something..." rows="4" required></textarea>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+
+    <div class="card">
+      <h3>Memories</h3>
+      <div id="memories" class="row"></div>
+      <div id="empty" class="muted"></div>
+    </div>
+
+    <script>
+      const API = location.origin;
+
+      async function listMemories() {
+        const res = await fetch(`${API}/memories`);
+        const data = await res.json();
+        const wrap = document.getElementById("memories");
+        const empty = document.getElementById("empty");
+        wrap.innerHTML = "";
+        if (!data.length) {
+          empty.textContent = "No memories yet — create your first one above.";
+          return;
+        }
+        empty.textContent = "";
+        for (const m of data) {
+          const el = document.createElement("div");
+          el.className = "card";
+          el.innerHTML = `<strong>${m.title}</strong>
+                          <div class="muted">${new Date(m.timestamp).toLocaleString()}</div>
+                          <p>${m.body}</p>`;
+          wrap.appendChild(el);
+        }
+      }
+
+      document.getElementById("create-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const title = document.getElementById("title").value.trim();
+        const body = document.getElementById("body").value.trim();
+        if (!title || !body) return;
+
+        const res = await fetch(`${API}/memories`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, body })
+        });
+
+        if (!res.ok) {
+          alert("Failed to save memory");
+          return;
+        }
+        document.getElementById("title").value = "";
+        document.getElementById("body").value = "";
+        await listMemories();
+      });
+
+      listMemories();
+    </script>
+  </body>
+</html>
