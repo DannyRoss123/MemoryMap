@@ -106,7 +106,10 @@ def seed():
             name="Alex Kim",
             email="alex.kim@example.com",
             phone="+1-555-200-1111",
+            avatar_url=None,
         )
+        client_alex.location = "Home suite - Room 204"
+        session.add(client_alex)
 
         client_maria = ensure_person(
             session,
@@ -114,7 +117,11 @@ def seed():
             name="Maria Gonzales",
             email="maria.gonzales@example.com",
             phone="+1-555-200-2222",
+            avatar_url=None,
         )
+        client_maria.location = "Sunrise Assisted Living - Room 18B"
+        session.add(client_maria)
+        session.commit()
 
         family_sarah = ensure_person(
             session,

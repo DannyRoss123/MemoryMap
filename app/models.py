@@ -27,6 +27,7 @@ class Person(SQLModel, table=True):
     email: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    location: Optional[str] = None  # e.g., Room 204, Lives with daughter
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
