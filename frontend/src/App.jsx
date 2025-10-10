@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API_BASE = "";
 const TABS = ["dashboard", "clients", "updates", "calendar", "family"];
@@ -23,6 +23,28 @@ function fetchJSON(path, caregiverId) {
       return res.text().then((txt) => {
         throw new Error(txt || res.statusText);
       });
+    }
+    return res.json();
+  });
+}
+
+function postJSON(path, caregiverId, body) {
+  const headers = caregiverId
+    ? {
+        "X-Person-Id": String(caregiverId),
+      }
+    : {};
+  return fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const message = await res.text();
+      throw new Error(message || res.statusText);
     }
     return res.json();
   });
@@ -57,6 +79,15 @@ const initials = (name = "") =>
 const formatRole = (value) =>
   value ? String(value).replace(/_/g, " ") : "caregiver";
 
+const normalizeText = (value) =>
+  typeof value === "string"
+    ? value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
+
 function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [caregiverId, setCaregiverId] = useState(() => {
@@ -66,6 +97,54 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(defaultState);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: "", description: "", userId: "" });
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskError, setTaskError] = useState("");
+
+  const fetchAllData = useCallback(async () => {
+    const [profile, clients, updates, alerts] = await Promise.all([
+      fetchJSON(`/caregivers/${caregiverId}/profile`, caregiverId),
+      fetchJSON(`/caregivers/${caregiverId}/clients`, caregiverId),
+      fetchJSON(`/caregivers/${caregiverId}/updates?limit=100`, caregiverId),
+      fetchJSON(`/caregivers/${caregiverId}/alerts?limit=100`, caregiverId),
+    ]);
+
+    const clientIds = (clients || []).map(({ client }) => client.id);
+    const taskPromises = clientIds.map((id) =>
+      fetchJSON(`/users/${id}/tasks?status=open&limit=50`, caregiverId)
+        .then((rows) => rows.map((row) => ({ ...row, user_id: id })))
+        .catch(() => [])
+    );
+    const tasksResults = await Promise.all(taskPromises);
+    const allTasks = tasksResults.flat();
+
+    const processedUpdates = (updates || [])
+      .map((item) => ({
+        ...item,
+        timestamp: item.timestamp || item.data?.created_at || item.data?.occurred_at,
+      }))
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+      );
+
+    const checkins = processedUpdates
+      .filter((item) => item.kind === "checkin")
+      .map((item) => ({
+        ...item,
+        timestamp: item.timestamp || item.data?.created_at,
+      }));
+
+    return {
+      profile,
+      clients,
+      updates: processedUpdates,
+      tasks: allTasks,
+      alerts: alerts || [],
+      checkins,
+    };
+  }, [caregiverId]);
 
   useEffect(() => {
     window.localStorage.setItem("caregiver_id", caregiverId);
@@ -73,45 +152,13 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadAll() {
+    const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [profile, clients, updates, alerts] = await Promise.all([
-          fetchJSON(`/caregivers/${caregiverId}/profile`, caregiverId),
-          fetchJSON(`/caregivers/${caregiverId}/clients`, caregiverId),
-          fetchJSON(`/caregivers/${caregiverId}/updates?limit=100`, caregiverId),
-          fetchJSON(`/caregivers/${caregiverId}/alerts?limit=100`, caregiverId),
-        ]);
-
-        const clientIds = (clients || []).map(({ client }) => client.id);
-        const taskPromises = clientIds.map((id) =>
-          fetchJSON(`/users/${id}/tasks?status=open&limit=50`, caregiverId)
-            .then((rows) => rows.map((row) => ({ ...row, user_id: id })))
-            .catch(() => [])
-        );
-        const tasksResults = await Promise.all(taskPromises);
-        const allTasks = tasksResults.flat();
-
-        const checkins = (updates || [])
-          .filter((item) => item.kind === "checkin")
-          .map((item) => ({
-            ...item,
-            timestamp: item.timestamp || item.data?.created_at,
-          }));
-
+        const payload = await fetchAllData();
         if (!cancelled) {
-          setData({
-            profile,
-            clients,
-            updates: (updates || []).map((item) => ({
-              ...item,
-              timestamp: item.timestamp || item.data?.created_at || item.data?.occurred_at,
-            })),
-            tasks: allTasks,
-            alerts: alerts || [],
-            checkins,
-          });
+          setData(payload);
         }
       } catch (err) {
         if (!cancelled) {
@@ -120,14 +167,75 @@ function App() {
           setData(defaultState);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    }
-    loadAll();
+    };
+    load();
     return () => {
       cancelled = true;
     };
-  }, [caregiverId]);
+  }, [fetchAllData]);
+
+  const canAddTask = data.clients.length > 0;
+
+  const handleOpenTaskModal = () => {
+    if (!data.clients.length) {
+      window.alert("Link a client before creating tasks.");
+      return;
+    }
+    setTaskForm({ title: "", description: "", userId: "" });
+    setTaskError("");
+    setTaskModalOpen(true);
+  };
+
+  const handleCloseTaskModal = () => {
+    if (taskSaving) return;
+    setTaskModalOpen(false);
+    setTaskError("");
+  };
+
+  const handleTaskFieldChange = (field) => (event) => {
+    const value = event.target.value;
+    setTaskForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleTaskSubmit = async (event) => {
+    event.preventDefault();
+    const title = taskForm.title.trim();
+    const userId = Number(taskForm.userId);
+    const description = taskForm.description.trim();
+
+    if (!title) {
+      setTaskError("Enter a task title.");
+      return;
+    }
+    if (!userId) {
+      setTaskError("Select a client to assign the task.");
+      return;
+    }
+
+    setTaskSaving(true);
+    setTaskError("");
+    try {
+      await postJSON(`/users/${userId}/tasks`, caregiverId, {
+        assigned_by: Number(caregiverId),
+        title,
+        description: description || null,
+      });
+      const refreshed = await fetchAllData();
+      setData(refreshed);
+      setTaskError("");
+      setTaskModalOpen(false);
+      setTaskForm({ title: "", description: "", userId: "" });
+    } catch (err) {
+      console.error(err);
+      setTaskError(err.message || "Could not create task. Try again.");
+    } finally {
+      setTaskSaving(false);
+    }
+  };
 
   const familyContacts = useMemo(() => {
     return data.clients.flatMap((entry) =>
@@ -155,72 +263,87 @@ function App() {
   };
 
   return (
-    <div className="layout">
-      <aside>
-        <div className="brand">Memory Map</div>
-        <nav>
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              className="nav-btn"
-              data-active={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab === "dashboard"
-                ? "Dashboard"
-                : tab === "clients"
-                ? "Clients"
-                : tab === "updates"
-                ? "Updates"
-                : tab === "calendar"
-                ? "Calendar"
-                : "Family & Friends"}
-            </button>
-          ))}
-        </nav>
-        <div className="muted">
-          Active caregiver ID: <strong>{caregiverId}</strong>
-        </div>
-        <button className="nav-btn" onClick={handleChangeCaregiver}>
-          Switch Caregiver
-        </button>
-      </aside>
-      <main>
-        <Header profile={data.profile} loading={loading} />
-        {error && <div className="card" style={{ color: "crimson" }}>{error}</div>}
-        {activeTab === "dashboard" && (
-          <DashboardSection
-            updates={data.updates}
-            alerts={data.alerts}
-            tasks={data.tasks}
-            checkins={data.checkins}
-            resolveClientName={resolveClientName}
-            familyContacts={familyContacts}
-            onNavigate={setActiveTab}
+    <>
+      <div className="layout">
+        <aside>
+          <div className="brand">Memory Map</div>
+          <nav>
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                className="nav-btn"
+                data-active={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab === "dashboard"
+                  ? "Dashboard"
+                  : tab === "clients"
+                  ? "Clients"
+                  : tab === "updates"
+                  ? "Updates"
+                  : tab === "calendar"
+                  ? "Calendar"
+                  : "Family & Friends"}
+              </button>
+            ))}
+          </nav>
+          <div className="muted">
+            Active caregiver ID: <strong>{caregiverId}</strong>
+          </div>
+          <button className="nav-btn" onClick={handleChangeCaregiver}>
+            Switch Caregiver
+          </button>
+        </aside>
+        <main>
+          <Header
+            profile={data.profile}
+            loading={loading}
+            onAddTask={handleOpenTaskModal}
+            canAddTask={canAddTask}
           />
-        )}
-        {activeTab === "clients" && (
-          <ClientsSection clients={data.clients} checkins={data.checkins} tasks={data.tasks} />
-        )}
-        {activeTab === "updates" && (
-          <UpdatesSection updates={data.updates} resolveClientName={resolveClientName} />
-        )}
-        {activeTab === "calendar" && (
-          <CalendarSection
-            tasks={data.tasks}
-            checkins={data.checkins}
-            resolveClientName={resolveClientName}
-          />
-        )}
-        {activeTab === "family" && (
-          <FamilySection clients={data.clients} />
-        )}
-      </main>
-    </div>
+          {error && <div className="card" style={{ color: "crimson" }}>{error}</div>}
+          {activeTab === "dashboard" && (
+            <DashboardSection
+              updates={data.updates}
+              alerts={data.alerts}
+              tasks={data.tasks}
+              checkins={data.checkins}
+              resolveClientName={resolveClientName}
+              familyContacts={familyContacts}
+              onNavigate={setActiveTab}
+            />
+          )}
+          {activeTab === "clients" && (
+            <ClientsSection clients={data.clients} checkins={data.checkins} tasks={data.tasks} />
+          )}
+          {activeTab === "updates" && (
+            <UpdatesSection updates={data.updates} resolveClientName={resolveClientName} />
+          )}
+          {activeTab === "calendar" && (
+            <CalendarSection
+              tasks={data.tasks}
+              checkins={data.checkins}
+              resolveClientName={resolveClientName}
+            />
+          )}
+          {activeTab === "family" && <FamilySection clients={data.clients} />}
+        </main>
+      </div>
+      <TaskModal
+        open={taskModalOpen}
+        onClose={handleCloseTaskModal}
+        onSubmit={handleTaskSubmit}
+        clients={data.clients}
+        values={taskForm}
+        onChange={handleTaskFieldChange}
+        error={taskError}
+        saving={taskSaving}
+      />
+    </>
   );
 }
 
-const Header = ({ profile, loading }) => {
+const Header = ({ profile, loading, onAddTask, canAddTask }) => {
   const today = fmtDate(new Date(), {
     weekday: "long",
     year: "numeric",
@@ -234,10 +357,18 @@ const Header = ({ profile, loading }) => {
           <div className="title">Caregiver Dashboard</div>
           <div className="muted">{today}</div>
         </div>
-        <div>
+        <div className="actions">
           <div className="badge">
             {loading ? "Loading caregiver..." : profile?.name || "Caregiver"}
           </div>
+          <button
+            type="button"
+            className="btn"
+            onClick={onAddTask}
+            disabled={!canAddTask}
+          >
+            Add Task
+          </button>
         </div>
       </div>
     </section>
@@ -485,35 +616,67 @@ const UpdatesSection = ({ updates, resolveClientName }) => {
           {!filtered.length ? (
             <div className="empty">No {filter === "all" ? "" : "matching "}updates yet.</div>
           ) : (
-            filtered.map((item) => (
-              <article className="feed-card" key={`${item.kind}-${item.source_id}`}>
-                <div className="muted">
-                  <span className="pill" style={{ marginRight: 8 }}>
-                    {item.kind}
-                  </span>
-                  <span>{fmtDateTime(item.timestamp)}</span>{" "}
-                  <span>{resolveClientName(item.user_id)}</span>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>
-                  {item.title || item.kind}
-                </div>
-                <div style={{ fontSize: 14, color: "#111827" }}>
-                  {item.summary || item.data?.notes || ""}
-                </div>
-                {item.kind === "task" && item.data?.description && (
-                  <div style={{ fontSize: 14, color: "#111827" }}>{item.data.description}</div>
-                )}
-                {item.kind === "checkin" && (
-                  <div style={{ fontSize: 14, color: "#111827" }}>
-                    Mood: {item.data?.mood || "-"} | Hydration: {item.data?.hydration || "-"} | Sleep:{" "}
-                    {item.data?.sleep_hours ?? "-"}h
+            filtered.map((item) => {
+              const summarySources = [item.summary, item.data?.description, item.data?.notes];
+              const primaryText = summarySources.find(
+                (text) => typeof text === "string" && text.trim()
+              );
+              const bodySections = [];
+              const seen = new Set();
+              const addSection = (value) => {
+                const text = typeof value === "string" ? value.trim() : "";
+                if (!text) return;
+                const normalized = normalizeText(text);
+                if (!normalized) return;
+                for (const existing of seen) {
+                  if (existing.includes(normalized) || normalized.includes(existing)) {
+                    return;
+                  }
+                }
+                seen.add(normalized);
+                bodySections.push(text);
+              };
+
+              addSection(primaryText);
+
+              if (item.kind === "task") {
+                addSection(item.data?.description);
+                addSection(item.data?.notes);
+              } else if (item.kind === "memory") {
+                addSection(item.data?.notes);
+              } else if (!primaryText) {
+                addSection(item.data?.notes);
+              }
+
+              return (
+                <article className="feed-card" key={`${item.kind}-${item.source_id}`}>
+                  <div className="muted">
+                    <span className="pill" style={{ marginRight: 8 }}>
+                      {item.kind}
+                    </span>
+                    <span>{fmtDateTime(item.timestamp)}</span>{" "}
+                    <span>{resolveClientName(item.user_id)}</span>
                   </div>
-                )}
-                {item.kind === "memory" && item.data?.image_url && (
-                  <img src={item.data.image_url} alt={item.title || "Memory"} />
-                )}
-              </article>
-            ))
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>
+                    {item.title || item.kind}
+                  </div>
+                  {bodySections.map((text, idx) => (
+                    <div key={idx} style={{ fontSize: 14, color: "#111827" }}>
+                      {text}
+                    </div>
+                  ))}
+                  {item.kind === "checkin" && (
+                    <div style={{ fontSize: 14, color: "#111827" }}>
+                      Mood: {item.data?.mood || "-"} | Hydration: {item.data?.hydration || "-"} | Sleep:{" "}
+                      {item.data?.sleep_hours ?? "-"}h
+                    </div>
+                  )}
+                  {item.kind === "memory" && item.data?.image_url && (
+                    <img src={item.data.image_url} alt={item.title || "Memory"} />
+                  )}
+                </article>
+              );
+            })
           )}
         </div>
       </div>
@@ -759,6 +922,80 @@ const FamilySection = ({ clients }) => {
   );
 };
 
+const TaskModal = ({ open, onClose, onSubmit, clients, values, onChange, error, saving }) => {
+  if (!open) return null;
+  const clientOptions = (clients || [])
+    .map((entry) => entry.client)
+    .filter((client) => client && client.id);
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !saving) {
+          onClose();
+        }
+      }}
+    >
+      <div className="modal">
+        <h2>Create Task</h2>
+        <form onSubmit={onSubmit}>
+          <label>
+            Title
+            <input
+              type="text"
+              value={values.title}
+              onChange={onChange("title")}
+              placeholder="Task title"
+              required
+              autoFocus
+            />
+          </label>
+          <label>
+            Description
+            <textarea
+              value={values.description}
+              onChange={onChange("description")}
+              placeholder="Details for the caregiver or client"
+            />
+          </label>
+          <label>
+            Assign to
+            <select
+              value={values.userId}
+              onChange={onChange("userId")}
+              required
+              disabled={!clientOptions.length}
+            >
+              <option value="" disabled>
+                {clientOptions.length ? "Select client" : "Link clients first"}
+              </option>
+              {clientOptions.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name || `Client #${client.id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error && <div className="error-text">{error}</div>}
+          <div className="buttons">
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={saving}>
+              {saving ? "Saving..." : "Create Task"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const copyToClipboard = (value, label) => {
   if (!value) {
     window.alert(`No ${label} available`);
@@ -773,3 +1010,5 @@ const copyToClipboard = (value, label) => {
 };
 
 export default App;
+
+

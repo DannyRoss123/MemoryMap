@@ -45,6 +45,7 @@
     .topbar{
       display:flex;justify-content:space-between;align-items:center;gap:24px;
     }
+    .topbar .actions{display:flex;gap:12px;flex-wrap:wrap;}
     .topbar .info{display:flex;flex-direction:column;gap:6px}
     .title{font-size:26px;font-weight:800;}
     .muted{color:var(--muted);font-size:14px;}
@@ -114,6 +115,30 @@
     .feed-card .title{font-weight:700;font-size:16px;}
     .feed-card .body{font-size:14px;color:#111827;}
     .feed-card img{max-width:100%;border-radius:12px;}
+    .modal-backdrop{
+      position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;
+      z-index:1000;padding:20px;
+    }
+    .modal-backdrop[data-active="true"]{display:flex;}
+    .modal{
+      background:#fff;border-radius:18px;box-shadow:var(--shadow);padding:28px;max-width:420px;width:100%;
+      display:flex;flex-direction:column;gap:18px;
+    }
+    .modal h2{margin:0;font-size:20px;font-weight:700;}
+    .modal form{display:flex;flex-direction:column;gap:16px;}
+    .modal label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;}
+    .modal input,.modal textarea,.modal select{
+      border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:14px;font-family:inherit;
+    }
+    .modal textarea{min-height:90px;resize:vertical;}
+    .modal .buttons{display:flex;justify-content:flex-end;gap:12px;}
+    .modal button{cursor:pointer;}
+    .btn{
+      border:none;border-radius:12px;padding:10px 16px;font-weight:600;font-size:14px;font-family:inherit;
+      background:var(--accent);color:#fff;transition:opacity .18s ease;
+    }
+    .btn.secondary{background:rgba(148,163,184,.2);color:var(--text);}
+    .btn[disabled]{opacity:.6;cursor:not-allowed;}
     .calendar-wrap{
       display:grid;grid-template-columns:320px 1fr;gap:24px;
       align-items:start;
@@ -191,8 +216,9 @@
             <div class="title">Caregiver Dashboard</div>
             <div class="muted" id="top-date"></div>
           </div>
-          <div>
+          <div class="actions">
             <div class="badge" id="caregiver-name">Loading caregiver...</div>
+            <button class="btn" id="open-task-modal">Add Task</button>
           </div>
         </div>
 
@@ -310,11 +336,48 @@
       </section>
     </main>
   </div>
+  <div id="task-modal" class="modal-backdrop">
+    <div class="modal">
+      <h2>Create Task</h2>
+      <form id="task-form">
+        <label>
+          Title
+          <input id="task-title" type="text" placeholder="Task title" required />
+        </label>
+        <label>
+          Description
+          <textarea id="task-description" placeholder="Details for the caregiver or client"></textarea>
+        </label>
+        <label>
+          Assign to
+          <select id="task-assignee" required></select>
+        </label>
+        <div class="buttons">
+          <button type="button" class="btn secondary" id="cancel-task">Cancel</button>
+          <button type="submit" class="btn" id="submit-task">Create Task</button>
+        </div>
+      </form>
+      <div class="muted" id="task-form-hint" style="font-size:12px;"></div>
+    </div>
+  </div>
   <script>
     const API = "";
     let clients = [];
     let clientMap = new Map();
     let familyContacts = [];
+    let allUpdates = [];
+    let allTasks = [];
+    let allAlerts = [];
+    let allCheckins = [];
+    const taskModal = document.getElementById("task-modal");
+    const taskForm = document.getElementById("task-form");
+    const taskTitleInput = document.getElementById("task-title");
+    const taskDescriptionInput = document.getElementById("task-description");
+    const taskAssigneeSelect = document.getElementById("task-assignee");
+    const taskFormHint = document.getElementById("task-form-hint");
+    const submitTaskBtn = document.getElementById("submit-task");
+    const openTaskBtn = document.getElementById("open-task-modal");
+    const cancelTaskBtn = document.getElementById("cancel-task");
     const today = new Date();
     document.getElementById("top-date").textContent = today.toLocaleDateString(undefined, {
       weekday:"long", year:"numeric", month:"long", day:"numeric"
@@ -369,6 +432,15 @@
       if(!res.ok) throw new Error(await res.text());
       return res.json();
     }
+    async function postJSON(url, body){
+      const res = await fetch(url, {
+        method:"POST",
+        headers:{ ...headers(), "Content-Type":"application/json" },
+        body: JSON.stringify(body)
+      });
+      if(!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
 
     function fmtDate(input, opts){
       if(!input) return "";
@@ -402,10 +474,106 @@
       return `<span class="${cls}">${label}</span>`;
     }
 
-    let allUpdates = [];
-    let allTasks = [];
-    let allAlerts = [];
-    let allCheckins = [];
+    function hydrateUpdates(sourceUpdates, sourceAlerts){
+      const updates = sourceUpdates || [];
+      allUpdates = updates.map(item=>({
+        ...item,
+        timestamp: item.timestamp || item.data?.created_at || item.data?.occurred_at
+      })).sort((a,b)=>new Date(b.timestamp||0) - new Date(a.timestamp||0));
+      if(sourceAlerts) allAlerts = sourceAlerts;
+      allCheckins = allUpdates.filter(u=>u.kind==="checkin");
+    }
+
+    async function refreshAfterTask(){
+      await loadTasks();
+      try{
+        const updates = await fetchJSON(`${API}/caregivers/${caregiverId}/updates?limit=100`);
+        hydrateUpdates(updates, allAlerts);
+      }catch(err){
+        console.warn("Unable to refresh updates", err);
+      }
+      renderDashboard();
+      renderClients();
+      renderUpdates();
+      initCalendar();
+    }
+
+    function populateAssigneeOptions(){
+      taskAssigneeSelect.innerHTML = "";
+      if(!clients.length){
+        taskAssigneeSelect.innerHTML = `<option value="" disabled>No clients available</option>`;
+        taskAssigneeSelect.disabled = true;
+        taskFormHint.textContent = "Link clients to assign tasks.";
+        return;
+      }
+      taskAssigneeSelect.disabled = false;
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select client";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      taskAssigneeSelect.appendChild(placeholder);
+      clients.forEach(entry=>{
+        const client = entry.client || {};
+        if(!client.id) return;
+        const option = document.createElement("option");
+        option.value = client.id;
+        option.textContent = client.name || `Client #${client.id}`;
+        taskAssigneeSelect.appendChild(option);
+      });
+    }
+
+    function openTaskModal(){
+      if(!clients.length){
+        alert("Link a client before creating tasks.");
+        return;
+      }
+      populateAssigneeOptions();
+      taskForm.reset();
+      taskAssigneeSelect.value = "";
+      taskFormHint.textContent = "";
+      submitTaskBtn.disabled = false;
+      submitTaskBtn.textContent = "Create Task";
+      taskModal.dataset.active = "true";
+    }
+
+    function closeTaskModal(){
+      taskModal.dataset.active = "false";
+    }
+
+    async function handleTaskSubmit(event){
+      event.preventDefault();
+      taskFormHint.textContent = "";
+      const title = taskTitleInput.value.trim();
+      const description = taskDescriptionInput.value.trim();
+      const userId = Number(taskAssigneeSelect.value);
+      if(!title){
+        taskFormHint.textContent = "Enter a task title.";
+        return;
+      }
+      if(!userId){
+        taskFormHint.textContent = "Select a client to assign the task.";
+        return;
+      }
+      const payload = {
+        assigned_by: caregiverId,
+        title,
+        description: description || null
+      };
+      submitTaskBtn.disabled = true;
+      submitTaskBtn.textContent = "Saving...";
+      try{
+        await postJSON(`${API}/users/${userId}/tasks`, payload);
+        await refreshAfterTask();
+        closeTaskModal();
+      }catch(err){
+        console.error(err);
+        taskFormHint.textContent = err.message || "Could not create task. Try again.";
+      }finally{
+        submitTaskBtn.disabled = false;
+        submitTaskBtn.textContent = "Create Task";
+      }
+    }
 
     async function loadData(){
       try{
@@ -424,12 +592,7 @@
             client: entry.client
           }))
         );
-        allUpdates = (updates || []).map(item=>({
-          ...item,
-          timestamp: item.timestamp || item.data?.created_at || item.data?.occurred_at
-        })).sort((a,b)=>new Date(b.timestamp||0) - new Date(a.timestamp||0));
-        allAlerts = alerts || [];
-        allCheckins = allUpdates.filter(u=>u.kind==="checkin");
+        hydrateUpdates(updates, alerts);
 
         document.getElementById("caregiver-name").textContent = profile.name || `Caregiver #${caregiverId}`;
 
@@ -546,9 +709,10 @@
         }
         displayed.forEach(entry=>{
           const person = entry.person;
+          const roleLabel = entry.relationship || formatRole(entry.role);
           contacts.insertAdjacentHTML("beforeend", `
             <div class="item">
-              <div class="line"><span>${person.name || "Name"}</span><span class="pill">${entry.relationship || entry.role}</span></div>
+              <div class="line"><span>${person.name || "Name"}</span><span class="pill">${roleLabel}</span></div>
               <div class="muted">${person.phone || "No phone"} - ${person.email || "No email"}</div>
             </div>
           `);
@@ -559,6 +723,11 @@
     function resolveUserName(userId){
       const entry = clientMap.get(userId);
       return entry?.client?.name || null;
+    }
+
+    function formatRole(value){
+      if(!value) return "Caregiver";
+      return String(value).replace(/_/g, " ");
     }
 
     function renderClients(){
@@ -574,13 +743,16 @@
         const latestMood = checkins.length ? (checkins[0].data?.mood || "-") : "-";
         const tasksForUser = allTasks.filter(task=>task.user_id===client.id);
         const familyCount = (entry.family || []).length;
+        const roleLabel = entry.relationship || formatRole(entry.caregiver_role);
+        const location = client.location || "Location not set";
         grid.insertAdjacentHTML("beforeend", `
           <div class="person-card">
             <div class="top">
               <div class="avatar">${initials(client.name)}</div>
               <div>
                 <div style="font-weight:700;font-size:16px;">${client.name || "Client"}</div>
-                <div class="muted">${entry.relationship || "Caregiver relationship unspecified"}</div>
+                <div class="muted">${location}</div>
+                <div class="muted">Your role: ${roleLabel}</div>
               </div>
             </div>
             <div class="quick-stats">
@@ -607,28 +779,78 @@
         items.forEach(item=>{
           const userName = resolveUserName(item.user_id);
           const ts = fmtDateTime(item.timestamp);
-          const summary = item.summary || item.data?.notes || "";
-          const extras = [];
+          const summarySources = [
+            typeof item.summary === "string" ? item.summary.trim() : "",
+            typeof item.data?.description === "string" ? item.data.description.trim() : "",
+            typeof item.data?.notes === "string" ? item.data.notes.trim() : ""
+          ];
+          const seenText = new Set();
+          const bodySections = [];
+          const normalizeText = value=>{
+            return value
+              .toLowerCase()
+              .replace(/[^a-z0-9\s]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+          };
+          const addTextSection = value=>{
+            const text = typeof value === "string" ? value.trim() : "";
+            if(!text) return;
+            const normalized = normalizeText(text);
+            if(!normalized) return;
+            for(const existing of seenText){
+              if(existing.includes(normalized) || normalized.includes(existing)){
+                return;
+              }
+            }
+            seenText.add(normalized);
+            bodySections.push(`<div class="body">${text}</div>`);
+          };
+          const addHtmlSection = html=>{
+            if(!html) return;
+            bodySections.push(`<div class="body">${html}</div>`);
+          };
+
+          const summary = summarySources.find(text=>text)||"";
+          const normalizedSummary = summary ? normalizeText(summary) : "";
+          addTextSection(summary);
+
           if(item.kind==="task"){
-            extras.push(item.data?.description || "");
+            const description = typeof item.data?.description === "string" ? item.data.description.trim() : "";
+            const normalizedDescription = description ? normalizeText(description) : "";
+            if(description && normalizedDescription !== normalizedSummary){
+              addTextSection(description);
+            }
+            const notes = typeof item.data?.notes === "string" ? item.data.notes.trim() : "";
+            if(notes){
+              const normalizedNotes = normalizeText(notes);
+              const isSameAsSummary = normalizedNotes && normalizedSummary && normalizedNotes === normalizedSummary;
+              const isSameAsDescription = normalizedNotes && normalizedDescription && normalizedNotes === normalizedDescription;
+              if(!isSameAsSummary && !isSameAsDescription){
+                addTextSection(notes);
+              }
+            }
           }
           if(item.kind==="checkin"){
-            extras.push(`Mood: ${item.data?.mood || "-"}`);
-            if(item.data?.hydration) extras.push(`Hydration: ${item.data.hydration}`);
-            if(item.data?.sleep_hours!=null) extras.push(`Sleep: ${item.data.sleep_hours}h`);
+            addTextSection(`Mood: ${item.data?.mood || "-"}`);
+            if(item.data?.hydration) addTextSection(`Hydration: ${item.data.hydration}`);
+            if(item.data?.sleep_hours!=null) addTextSection(`Sleep: ${item.data.sleep_hours}h`);
+            if(item.data?.notes && item.data.notes !== summary) addTextSection(item.data.notes);
           }
           if(item.kind==="alert"){
-            extras.push(item.data?.message);
+            addTextSection(item.data?.message);
           }
-          if(item.kind==="memory" && item.data?.image_url){
-            extras.push(`<img src="${item.data.image_url}" alt="${item.title || "Memory"}"/>`);
+          if(item.kind==="memory"){
+            if(item.data?.notes && item.data.notes !== summary) addTextSection(item.data.notes);
+            if(item.data?.image_url){
+              addHtmlSection(`<img src="${item.data.image_url}" alt="${item.title || "Memory"}"/>`);
+            }
           }
           feed.insertAdjacentHTML("beforeend", `
             <article class="feed-card">
               <div class="meta"><span class="pill">${item.kind}</span><span>${ts}</span><span>${userName || ""}</span></div>
               <div class="title">${item.title || item.kind}</div>
-              <div class="body">${summary || ""}</div>
-              ${extras.filter(Boolean).map(val=>`<div class="body">${val}</div>`).join("")}
+              ${bodySections.join("") || `<div class="body"></div>`}
             </article>
           `);
         });
@@ -777,15 +999,16 @@
       clients.forEach(entry=>{
         const client = entry.client || {};
         const contacts = entry.family || [];
-        const relationship = entry.relationship || entry.caregiver_role || "Caregiver";
+        const caregiverRole = entry.relationship || formatRole(entry.caregiver_role);
         const contactMarkup = contacts.length
           ? contacts.map(contact=>{
               const person = contact.person || {};
               const phone = person.phone || "";
               const email = person.email || "";
+              const relationshipLabel = contact.relationship || formatRole(contact.role);
               return `
                 <div class="item">
-                  <div class="line"><span>${person.name || "Name"}</span><span class="pill">${contact.relationship || contact.role}</span></div>
+                  <div class="line"><span>${person.name || "Name"}</span><span class="pill">${relationshipLabel}</span></div>
                   <div class="muted">${phone || "No phone listed"} - ${email || "No email listed"}</div>
                   <div class="contact-actions">
                     <button data-copy="${phone}">Copy Phone</button>
@@ -796,10 +1019,10 @@
             }).join("")
           : `<div class="empty">No family contacts yet for this client.</div>`;
         grid.insertAdjacentHTML("beforeend", `
-          <div class="contact-card">
-            <div class="name">${client.name || "Client"}</div>
-            <div class="labels">
-              <span class="chip">${relationship}</span>
+            <div class="contact-card">
+              <div class="name">${client.name || "Client"}</div>
+              <div class="labels">
+              <span class="chip">${caregiverRole}</span>
               <span class="chip">Family contacts: ${contacts.length}</span>
             </div>
             ${contactMarkup}
@@ -817,6 +1040,15 @@
         });
       });
     }
+
+    openTaskBtn.addEventListener("click", openTaskModal);
+    cancelTaskBtn.addEventListener("click", closeTaskModal);
+    taskForm.addEventListener("submit", handleTaskSubmit);
+    taskModal.addEventListener("click", evt=>{
+      if(evt.target === taskModal){
+        closeTaskModal();
+      }
+    });
 
     loadData();
 

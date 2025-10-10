@@ -93,6 +93,13 @@ main {
   gap: 24px;
 }
 
+.topbar .actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .topbar .info {
   display: flex;
   flex-direction: column;
@@ -318,6 +325,98 @@ main {
 .feed-card img {
   max-width: 100%;
   border-radius: 12px;
+}
+
+.btn {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.18s ease;
+}
+
+.btn.secondary {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text);
+}
+
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.modal h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.modal input,
+.modal textarea,
+.modal select {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.modal textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.modal .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.error-text {
+  color: #b91c1c;
+  font-size: 13px;
 }
 
 .calendar-wrap {
