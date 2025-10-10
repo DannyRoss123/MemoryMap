@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Memory Map - Caregiver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{
+      --bg:#f5f6fa; --panel:#ffffff; --border:#e5e7eb; --shadow:0 12px 32px rgba(15,23,42,.08);
+      --text:#0f172a; --muted:#6b7280; --accent:#1e40af; --accent-soft:#eef2ff;
+      --navW:240px; --radius:18px; --gap:24px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+      background:var(--bg);color:var(--text);min-height:100vh;
+      display:flex;
+    }
+    a{text-decoration:none;color:inherit}
+    .layout{flex:1;display:grid;grid-template-columns:var(--navW) 1fr;min-height:100vh}
+    aside{
+      background:var(--panel);
+      border-right:1px solid var(--border);
+      padding:28px 22px;
+      display:flex;flex-direction:column;gap:24px;
+    }
+    .brand{font-size:18px;font-weight:800;letter-spacing:.03em}
+    nav{display:flex;flex-direction:column;gap:8px}
+    .nav-btn{
+      display:flex;align-items:center;gap:10px;
+      padding:12px 14px;border-radius:12px;border:0;background:transparent;
+      font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;text-align:left;
+      transition:background .18s ease,color .18s ease;
+    }
+    .nav-btn[data-active="true"]{
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .nav-btn:hover{background:rgba(30,64,175,.08);color:var(--accent);}
+    main{
+      padding:32px 48px;
+      display:flex;flex-direction:column;gap:32px;
+      overflow-y:auto;
+    }
+    .topbar{
+      display:flex;justify-content:space-between;align-items:center;gap:24px;
+    }
+    .topbar .info{display:flex;flex-direction:column;gap:6px}
+    .title{font-size:26px;font-weight:800;}
+    .muted{color:var(--muted);font-size:14px;}
+    .badge{
+      display:inline-flex;align-items:center;gap:6px;padding:6px 10px;
+      background:var(--accent-soft);color:var(--accent);border-radius:999px;
+      font-size:13px;font-weight:600;
+    }
+    .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--gap);}
+    .card{
+      background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+      padding:20px 22px;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:12px;
+    }
+    .card h3{font-size:17px;font-weight:700;}
+    .card .metric{font-size:32px;font-weight:900;line-height:1;}
+    .card .sub{font-size:13px;color:var(--muted);}
+    .card .cta{margin-top:auto;font-weight:600;color:var(--accent);}
+    .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--gap);}
+    .list{display:flex;flex-direction:column;gap:14px;}
+    .list .item{
+      border:1px solid var(--border);border-radius:14px;padding:14px 16px;
+      background:#fff;display:flex;flex-direction:column;gap:8px;
+    }
+    .item .line{display:flex;justify-content:space-between;gap:12px;font-size:14px;}
+    .pill{
+      padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;
+      background:rgba(15,23,42,.06);color:#0f172a;
+    }
+    .pill.warn{background:#fef3c7;color:#92400e;}
+    .pill.danger{background:#fee2e2;color:#991b1b;}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;}
+    button, .ghost{
+      font-family:inherit;
+    }
+    .ghost{
+      background:rgba(148,163,184,.16);border:none;border-radius:50%;width:42px;height:42px;
+      display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent);cursor:pointer;
+    }
+    .section{display:none;flex-direction:column;gap:32px;}
+    .section[data-active="true"]{display:flex;}
+    .people-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;}
+    .person-card{
+      background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;
+      display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow);
+    }
+    .avatar{
+      width:52px;height:52px;border-radius:18px;background:linear-gradient(135deg,#1e293b,#0f172a);
+      display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;
+      font-size:20px;
+    }
+    .person-card .top{display:flex;align-items:center;gap:14px;}
+    .quick-stats{display:flex;gap:12px;font-size:13px;color:var(--muted);flex-wrap:wrap;}
+    .updates{display:flex;flex-direction:column;gap:20px;}
+    .filters{display:flex;gap:10px;flex-wrap:wrap;}
+    .filter{
+      padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;
+      font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;
+    }
+    .filter[data-active="true"]{background:var(--accent);color:#fff;border-color:var(--accent);}
+    .feed{display:flex;flex-direction:column;gap:16px;}
+    .feed-card{
+      background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:10px;
+    }
+    .feed-card .meta{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--muted);}
+    .feed-card .title{font-weight:700;font-size:16px;}
+    .feed-card .body{font-size:14px;color:#111827;}
+    .feed-card img{max-width:100%;border-radius:12px;}
+    .calendar-wrap{
+      display:grid;grid-template-columns:320px 1fr;gap:24px;
+      align-items:start;
+    }
+    .calendar{
+      background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);
+      padding:20px;
+    }
+    .calendar header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+    .calendar table{width:100%;border-collapse:collapse;text-align:center;font-size:14px;}
+    .calendar th{padding:6px 0;color:var(--muted);font-weight:600;}
+    .calendar td{
+      width:14%;padding:10px;border-radius:12px;cursor:pointer;position:relative;
+    }
+    .calendar td[data-out="1"]{color:#cbd5f5;cursor:default;}
+    .calendar td[data-active="true"]{background:var(--accent);color:#fff;}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);position:absolute;left:50%;transform:translateX(-50%);bottom:8px;}
+    .dot.task{background:#f59e0b;}
+    .dot.checkin{background:#10b981;}
+    .agenda{
+      background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);
+      padding:22px;display:flex;flex-direction:column;gap:16px;
+    }
+    .agenda .item{border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;}
+    .contacts{
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;
+    }
+    .contact-card{
+      background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:10px;font-size:14px;
+    }
+    .contact-card .name{font-weight:700;font-size:16px;}
+    .contact-card .labels{display:flex;gap:8px;flex-wrap:wrap;}
+    .chip{background:rgba(15,23,42,.08);color:#0f172a;font-size:12px;border-radius:999px;padding:6px 10px;font-weight:600;}
+    .small{font-size:12px;color:var(--muted);}
+    .contact-actions{display:flex;gap:8px;}
+    .contact-actions button{
+      flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);
+      background:#f8fafc;font-weight:600;color:var(--accent);cursor:pointer;
+    }
+    .empty{
+      border:1px dashed var(--border);border-radius:16px;padding:28px;text-align:center;color:var(--muted);font-size:15px;
+      background:#fff;
+    }
+    @media (max-width:1024px){
+      .layout{grid-template-columns:1fr;}
+      aside{display:none;}
+      main{padding:24px;}
+      .calendar-wrap{grid-template-columns:1fr;}
+    }
+    @media (max-width:620px){
+      .topbar{flex-direction:column;align-items:flex-start;}
+      .card-grid{grid-template-columns:1fr;}
+      .split{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">Memory Map</div>
+      <nav>
+        <button class="nav-btn" data-target="dashboard" data-active="true">Dashboard</button>
+        <button class="nav-btn" data-target="clients">Clients</button>
+        <button class="nav-btn" data-target="updates">Updates</button>
+        <button class="nav-btn" data-target="calendar">Calendar</button>
+        <button class="nav-btn" data-target="family">Family & Friends</button>
+      </nav>
+      <div class="small">Need to switch caregivers? <button id="changeCaregiver" class="filter" style="margin-top:8px;">Set Active ID</button></div>
+    </aside>
+    <main>
+      <section class="section" id="section-dashboard" data-active="true">
+        <div class="topbar">
+          <div class="info">
+            <div class="title">Caregiver Dashboard</div>
+            <div class="muted" id="top-date"></div>
+          </div>
+          <div>
+            <div class="badge" id="caregiver-name">Loading caregiver...</div>
+          </div>
+        </div>
+
+        <div class="card-grid" id="metric-cards">
+          <div class="card">
+            <h3>Open Tasks</h3>
+            <div class="metric" id="metric-tasks">0</div>
+            <div class="sub">Tasks needing attention</div>
+          </div>
+          <div class="card">
+            <h3>Recent Check-ins</h3>
+            <div class="metric" id="metric-checkins">0</div>
+            <div class="sub">Last 7 days across your circle</div>
+          </div>
+          <div class="card">
+            <h3>Unread Alerts</h3>
+            <div class="metric" id="metric-alerts">0</div>
+            <div class="sub">Alerts waiting for review</div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="card" id="recent-update">
+            <h3>Recent Update</h3>
+            <div class="muted">Pulling the latest activity...</div>
+          </div>
+          <div class="card">
+            <h3>Upcoming Tasks</h3>
+            <div class="list" id="upcoming-tasks"></div>
+            <a class="cta" href="#updates" data-link="updates">View all tasks</a>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <h3>Recent Memories</h3>
+            <div class="list" id="recent-memories"></div>
+          </div>
+          <div class="card">
+            <h3>Emergency Contacts</h3>
+            <div class="list" id="emergency-contacts"></div>
+            <a class="cta" href="#family" data-link="family">View all contacts</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="section-clients">
+        <div class="topbar">
+          <div class="info">
+            <div class="title">Clients</div>
+            <div class="muted">People you support day to day</div>
+          </div>
+        </div>
+        <div id="clients-grid" class="people-grid"></div>
+      </section>
+
+      <section class="section" id="section-updates">
+        <div class="topbar">
+          <div class="info">
+            <div class="title">Updates Feed</div>
+            <div class="muted">Latest activity across your circle</div>
+          </div>
+          <div class="filters" id="feed-filters">
+            <button class="filter" data-kind="all" data-active="true">All</button>
+            <button class="filter" data-kind="task">Tasks</button>
+            <button class="filter" data-kind="checkin">Check-ins</button>
+            <button class="filter" data-kind="alert">Alerts</button>
+            <button class="filter" data-kind="memory">Memories</button>
+          </div>
+        </div>
+        <div class="updates">
+          <div class="feed" id="feed"></div>
+        </div>
+      </section>
+
+      <section class="section" id="section-calendar">
+        <div class="topbar">
+          <div class="info">
+            <div class="title">Calendar</div>
+            <div class="muted">Due dates and wellness check-ins</div>
+          </div>
+        </div>
+        <div class="calendar-wrap">
+          <div class="calendar">
+            <header>
+              <button class="filter" id="prev-month">Prev</button>
+              <div id="month-label" style="font-weight:700;"></div>
+              <button class="filter" id="next-month">Next</button>
+            </header>
+            <table>
+              <thead>
+                <tr>
+                  <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                </tr>
+              </thead>
+              <tbody id="calendar-body"></tbody>
+            </table>
+          </div>
+          <div class="agenda">
+            <h3>Day Details</h3>
+            <div class="muted" id="agenda-date">Select a date</div>
+            <div class="list" id="agenda-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="section-family">
+        <div class="topbar">
+          <div class="info">
+            <div class="title">Family & Friends</div>
+            <div class="muted">Contact list grouped by client</div>
+          </div>
+        </div>
+        <div class="contacts" id="family-grid"></div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const API = "";
+    let clients = [];
+    let clientMap = new Map();
+    let familyContacts = [];
+    const today = new Date();
+    document.getElementById("top-date").textContent = today.toLocaleDateString(undefined, {
+      weekday:"long", year:"numeric", month:"long", day:"numeric"
+    });
+
+    const sections = document.querySelectorAll(".section");
+    const navButtons = document.querySelectorAll(".nav-btn");
+    navButtons.forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        navButtons.forEach(b=>b.dataset.active="false");
+        sections.forEach(sec=>sec.dataset.active="false");
+        btn.dataset.active="true";
+        const target = btn.dataset.target;
+        document.getElementById(`section-${target}`).dataset.active="true";
+        window.location.hash = target;
+      });
+    });
+    document.querySelectorAll("[data-link]").forEach(el=>{
+      el.addEventListener("click", e=>{
+        e.preventDefault();
+        const target = el.dataset.link;
+        const btn = [...navButtons].find(b=>b.dataset.target===target);
+        if(btn) btn.click();
+      });
+    });
+
+    function parseId(value){
+      const n = Number(value);
+      return Number.isFinite(n) && n>0 ? n : null;
+    }
+
+    const stored = parseId(localStorage.getItem("caregiver_id"));
+    const caregiverId = stored || 1;
+    if(!stored){
+      localStorage.setItem("caregiver_id", caregiverId);
+    }
+    document.getElementById("changeCaregiver").addEventListener("click", ()=>{
+      const next = window.prompt("Enter caregiver ID", caregiverId);
+      const parsed = parseId(next);
+      if(parsed){
+        localStorage.setItem("caregiver_id", parsed);
+        window.location.reload();
+      }
+    });
+
+    function headers(){
+      return { "X-Person-Id": String(caregiverId) };
+    }
+
+    async function fetchJSON(url){
+      const res = await fetch(url, { headers: headers() });
+      if(!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    function fmtDate(input, opts){
+      if(!input) return "";
+      const dt = new Date(input);
+      if(Number.isNaN(dt.getTime())) return "";
+      return dt.toLocaleDateString(undefined, opts || {
+        month:"short", day:"numeric"
+      });
+    }
+    function fmtDateTime(input){
+      if(!input) return "";
+      const dt = new Date(input);
+      if(Number.isNaN(dt.getTime())) return "";
+      return dt.toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+    }
+    function initials(name){
+      if(!name) return "?";
+      return name.split(/\s+/).slice(0,2).map(p=>p[0]).join("").toUpperCase();
+    }
+    function statusPill(task){
+      const due = task.due_at ? new Date(task.due_at) : null;
+      let cls = "pill";
+      let label = task.status || "open";
+      if(due){
+        const now = new Date();
+        if(task.status === "open" && due < now){
+          cls += " danger";
+          label = "Overdue";
+        }
+      }
+      return `<span class="${cls}">${label}</span>`;
+    }
+
+    let allUpdates = [];
+    let allTasks = [];
+    let allAlerts = [];
+    let allCheckins = [];
+
+    async function loadData(){
+      try{
+        const [profile, clientSummaries, updates, alerts] = await Promise.all([
+          fetchJSON(`${API}/caregivers/${caregiverId}/profile`),
+          fetchJSON(`${API}/caregivers/${caregiverId}/clients`),
+          fetchJSON(`${API}/caregivers/${caregiverId}/updates?limit=100`),
+          fetchJSON(`${API}/caregivers/${caregiverId}/alerts?limit=100`)
+        ]);
+
+        clients = clientSummaries || [];
+        clientMap = new Map(clients.map(entry => [entry.client.id, entry]));
+        familyContacts = clients.flatMap(entry =>
+          (entry.family || []).map(contact => ({
+            ...contact,
+            client: entry.client
+          }))
+        );
+        allUpdates = (updates || []).map(item=>({
+          ...item,
+          timestamp: item.timestamp || item.data?.created_at || item.data?.occurred_at
+        })).sort((a,b)=>new Date(b.timestamp||0) - new Date(a.timestamp||0));
+        allAlerts = alerts || [];
+        allCheckins = allUpdates.filter(u=>u.kind==="checkin");
+
+        document.getElementById("caregiver-name").textContent = profile.name || `Caregiver #${caregiverId}`;
+
+        await loadTasks();
+        renderDashboard();
+        renderClients();
+        renderUpdates();
+        initCalendar();
+        renderFamily();
+      }catch(err){
+        console.error(err);
+        alert("Failed loading caregiver data. Check server logs.");
+      }
+    }
+
+    async function loadTasks(){
+      const ids = clients.map(entry=>entry.client?.id).filter(Boolean);
+      const results = await Promise.all(ids.map(async id=>{
+        try{
+          const list = await fetchJSON(`${API}/users/${id}/tasks?status=open&limit=50`);
+          return (list || []).map(t=>({ ...t, user_id:id }));
+        }catch(err){
+          console.warn("Task fetch failed", id, err);
+          return [];
+        }
+      }));
+      allTasks = results.flat();
+    }
+
+    function renderDashboard(){
+      const openTasks = allTasks.length;
+      const now = Date.now();
+      const sevenDaysAgo = now - 7*24*3600*1000;
+      const recentCheckins = allCheckins.filter(c=>{
+        const ts = new Date(c.timestamp||c.data?.created_at||0).getTime();
+        return ts >= sevenDaysAgo;
+      }).length;
+      const unreadAlerts = allAlerts.filter(a=>!a.is_read).length;
+      document.getElementById("metric-tasks").textContent = openTasks;
+      document.getElementById("metric-checkins").textContent = recentCheckins;
+      document.getElementById("metric-alerts").textContent = unreadAlerts;
+
+      const rec = document.getElementById("recent-update");
+      rec.innerHTML = "<h3>Recent Update</h3>";
+      if(!allUpdates.length){
+        rec.insertAdjacentHTML("beforeend", `<div class="muted">No updates yet.</div>`);
+      }else{
+        const item = allUpdates[0];
+        const userName = resolveUserName(item.user_id);
+        rec.insertAdjacentHTML("beforeend", `
+          <div class="muted">${fmtDateTime(item.timestamp) || "Recently"} - ${userName || ""}</div>
+          <div style="font-weight:700;font-size:16px;">${item.title || item.kind}</div>
+          <div style="font-size:14px;color:#111827;">${item.summary || ""}</div>
+          <div class="actions">
+            <a class="cta" href="#updates" data-link="updates">Open feed</a>
+          </div>
+        `);
+      }
+
+      const upcoming = document.getElementById("upcoming-tasks");
+      upcoming.innerHTML = "";
+      if(!allTasks.length){
+        upcoming.innerHTML = `<div class="empty">No open tasks.</div>`;
+      }else{
+        const sorted = [...allTasks].sort((a,b)=>{
+          const da = a.due_at ? new Date(a.due_at).getTime() : Infinity;
+          const db = b.due_at ? new Date(b.due_at).getTime() : Infinity;
+          return da - db;
+        }).slice(0,4);
+        sorted.forEach(task=>{
+          const dueLabel = task.due_at ? fmtDate(task.due_at,{month:"short",day:"numeric"}) : "No due date";
+          const userName = resolveUserName(task.user_id);
+          const pill = statusPill(task);
+          upcoming.insertAdjacentHTML("beforeend", `
+            <div class="item">
+              <div class="line"><span>${task.title}</span>${pill}</div>
+              <div class="line muted"><span>${userName || "Unknown"}</span><span>${dueLabel}</span></div>
+            </div>
+          `);
+        });
+      }
+
+      const memories = document.getElementById("recent-memories");
+      memories.innerHTML = "";
+      const memoryItems = allUpdates.filter(u=>u.kind==="memory" && u.data?.image_url).slice(0,3);
+      if(!memoryItems.length){
+        memories.innerHTML = `<div class="empty">Add memories to see them here.</div>`;
+      }else{
+        memoryItems.forEach(mem=>{
+          memories.insertAdjacentHTML("beforeend", `
+            <div class="item">
+              <div class="line"><span>${mem.title || "Memory"}</span><span class="muted">${fmtDate(mem.timestamp)}</span></div>
+              <img src="${mem.data.image_url}" alt="${mem.title || "Memory photo"}"/>
+              <div class="muted">${mem.summary || ""}</div>
+            </div>
+          `);
+        });
+      }
+
+      const contacts = document.getElementById("emergency-contacts");
+      contacts.innerHTML = "";
+      if(!familyContacts.length){
+        contacts.innerHTML = `<div class="empty">Add family notifications on the Clients tab.</div>`;
+      }else{
+        const prioritized = [
+          ...familyContacts.filter(contact=>contact.notify),
+          ...familyContacts.filter(contact=>!contact.notify),
+        ];
+        const displayed = [];
+        for(const entry of prioritized){
+          if(displayed.length >= 3) break;
+          if(!entry.person) continue;
+          displayed.push(entry);
+        }
+        displayed.forEach(entry=>{
+          const person = entry.person;
+          contacts.insertAdjacentHTML("beforeend", `
+            <div class="item">
+              <div class="line"><span>${person.name || "Name"}</span><span class="pill">${entry.relationship || entry.role}</span></div>
+              <div class="muted">${person.phone || "No phone"} - ${person.email || "No email"}</div>
+            </div>
+          `);
+        });
+      }
+    }
+
+    function resolveUserName(userId){
+      const entry = clientMap.get(userId);
+      return entry?.client?.name || null;
+    }
+
+    function renderClients(){
+      const grid = document.getElementById("clients-grid");
+      grid.innerHTML = "";
+      if(!clients.length){
+        grid.innerHTML = `<div class="empty">No clients yet. Add a client link to populate this view.</div>`;
+        return;
+      }
+      clients.forEach(entry=>{
+        const client = entry.client || {};
+        const checkins = allCheckins.filter(item=>item.user_id===client.id);
+        const latestMood = checkins.length ? (checkins[0].data?.mood || "-") : "-";
+        const tasksForUser = allTasks.filter(task=>task.user_id===client.id);
+        const familyCount = (entry.family || []).length;
+        grid.insertAdjacentHTML("beforeend", `
+          <div class="person-card">
+            <div class="top">
+              <div class="avatar">${initials(client.name)}</div>
+              <div>
+                <div style="font-weight:700;font-size:16px;">${client.name || "Client"}</div>
+                <div class="muted">${entry.relationship || "Caregiver relationship unspecified"}</div>
+              </div>
+            </div>
+            <div class="quick-stats">
+              <span>Open tasks: ${tasksForUser.length}</span>
+              <span>Recent mood: ${latestMood}</span>
+              <span>Family contacts: ${familyCount}</span>
+            </div>
+            <div class="muted">${client.email || "No email"} - ${client.phone || "No phone"}</div>
+          </div>
+        `);
+      });
+    }
+
+    function renderUpdates(){
+      const feed = document.getElementById("feed");
+      const filters = document.getElementById("feed-filters");
+      function paint(kind){
+        feed.innerHTML = "";
+        const items = kind==="all" ? allUpdates : allUpdates.filter(item=>item.kind===kind);
+        if(!items.length){
+          feed.innerHTML = `<div class="empty">No ${kind==="all"?"":"matching "}updates yet.</div>`;
+          return;
+        }
+        items.forEach(item=>{
+          const userName = resolveUserName(item.user_id);
+          const ts = fmtDateTime(item.timestamp);
+          const summary = item.summary || item.data?.notes || "";
+          const extras = [];
+          if(item.kind==="task"){
+            extras.push(item.data?.description || "");
+          }
+          if(item.kind==="checkin"){
+            extras.push(`Mood: ${item.data?.mood || "-"}`);
+            if(item.data?.hydration) extras.push(`Hydration: ${item.data.hydration}`);
+            if(item.data?.sleep_hours!=null) extras.push(`Sleep: ${item.data.sleep_hours}h`);
+          }
+          if(item.kind==="alert"){
+            extras.push(item.data?.message);
+          }
+          if(item.kind==="memory" && item.data?.image_url){
+            extras.push(`<img src="${item.data.image_url}" alt="${item.title || "Memory"}"/>`);
+          }
+          feed.insertAdjacentHTML("beforeend", `
+            <article class="feed-card">
+              <div class="meta"><span class="pill">${item.kind}</span><span>${ts}</span><span>${userName || ""}</span></div>
+              <div class="title">${item.title || item.kind}</div>
+              <div class="body">${summary || ""}</div>
+              ${extras.filter(Boolean).map(val=>`<div class="body">${val}</div>`).join("")}
+            </article>
+          `);
+        });
+      }
+      filters.addEventListener("click", e=>{
+        const btn = e.target.closest(".filter");
+        if(!btn) return;
+        filters.querySelectorAll(".filter").forEach(b=>b.dataset.active="false");
+        btn.dataset.active="true";
+        paint(btn.dataset.kind);
+      });
+      paint("all");
+    }
+
+    let currentMonth = today.getMonth();
+    let currentYear = today.getFullYear();
+    const calendarBody = document.getElementById("calendar-body");
+    const monthLabel = document.getElementById("month-label");
+    const agendaDate = document.getElementById("agenda-date");
+    const agendaList = document.getElementById("agenda-list");
+    const eventsByDay = new Map();
+
+    function initCalendar(){
+      eventsByDay.clear();
+      const add = (dateKey, type, payload)=>{
+        if(!eventsByDay.has(dateKey)) eventsByDay.set(dateKey, []);
+        eventsByDay.get(dateKey).push({ type, payload });
+      };
+      allTasks.forEach(task=>{
+        if(!task.due_at) return;
+        const key = dateKey(new Date(task.due_at));
+        add(key,"task",task);
+      });
+      allCheckins.forEach(check=>{
+        const ts = new Date(check.timestamp || check.data?.created_at || 0);
+        if(Number.isNaN(ts.getTime())) return;
+        add(dateKey(ts),"checkin",check);
+      });
+      renderCalendar();
+    }
+
+    function dateKey(dt){
+      return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+    }
+
+    function renderCalendar(){
+      monthLabel.textContent = new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined,{month:"long",year:"numeric"});
+      calendarBody.innerHTML = "";
+      const first = new Date(currentYear, currentMonth, 1);
+      const startDay = first.getDay();
+      const daysInMonth = new Date(currentYear, currentMonth+1, 0).getDate();
+      let day = 1;
+      for(let week=0; week<6; week++){
+        const row = document.createElement("tr");
+        for(let col=0; col<7; col++){
+          const cell = document.createElement("td");
+          if(week===0 && col < startDay){
+            const prevDate = new Date(currentYear, currentMonth, col - startDay + 1);
+            cell.textContent = prevDate.getDate();
+            cell.dataset.out = "1";
+          }else if(day > daysInMonth){
+            const nextDate = new Date(currentYear, currentMonth+1, day - daysInMonth);
+            cell.textContent = nextDate.getDate();
+            cell.dataset.out = "1";
+            day++;
+          }else{
+            cell.textContent = day;
+            const date = new Date(currentYear, currentMonth, day);
+            const key = dateKey(date);
+            const events = eventsByDay.get(key);
+            if(events){
+              events.forEach(evt=>{
+                const marker = document.createElement("div");
+                marker.className = "dot " + evt.type;
+                cell.appendChild(marker);
+              });
+            }
+            cell.addEventListener("click", ()=>{
+              selectDate(date, cell);
+            });
+            day++;
+          }
+          row.appendChild(cell);
+        }
+        calendarBody.appendChild(row);
+        if(day > daysInMonth) break;
+      }
+    }
+
+    function selectDate(date, cell){
+      calendarBody.querySelectorAll("td").forEach(td=>td.dataset.active="false");
+      if(cell) cell.dataset.active="true";
+      const key = dateKey(date);
+      agendaDate.textContent = date.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+      const events = eventsByDay.get(key) || [];
+      agendaList.innerHTML = "";
+      if(!events.length){
+        agendaList.innerHTML = `<div class="empty">No events for this day.</div>`;
+      }else{
+        events.sort((a,b)=>{
+          const ta = new Date(a.payload.due_at || a.payload.timestamp || 0).getTime();
+          const tb = new Date(b.payload.due_at || b.payload.timestamp || 0).getTime();
+          return ta - tb;
+        });
+        events.forEach(evt=>{
+          if(evt.type==="task"){
+            agendaList.insertAdjacentHTML("beforeend", `
+              <div class="agenda item">
+                <div style="font-weight:700;">Task - ${evt.payload.title}</div>
+                <div class="muted">${resolveUserName(evt.payload.user_id) || ""}</div>
+                <div>${evt.payload.description || ""}</div>
+              </div>
+            `);
+          }else{
+            agendaList.insertAdjacentHTML("beforeend", `
+              <div class="agenda item">
+                <div style="font-weight:700;">Check-in</div>
+                <div class="muted">${resolveUserName(evt.payload.user_id) || ""}</div>
+                <div>Mood: ${evt.payload.data?.mood || "-"}</div>
+                <div>${evt.payload.data?.notes || ""}</div>
+              </div>
+            `);
+          }
+        });
+      }
+    }
+
+    document.getElementById("prev-month").addEventListener("click", ()=>{
+      currentMonth--;
+      if(currentMonth < 0){ currentMonth = 11; currentYear--; }
+      renderCalendar();
+    });
+    document.getElementById("next-month").addEventListener("click", ()=>{
+      currentMonth++;
+      if(currentMonth > 11){ currentMonth = 0; currentYear++; }
+      renderCalendar();
+    });
+
+    function renderFamily(){
+      const grid = document.getElementById("family-grid");
+      grid.innerHTML = "";
+      if(!clients.length){
+        grid.innerHTML = `<div class="empty">Link clients to start tracking their family and friends.</div>`;
+        return;
+      }
+      clients.forEach(entry=>{
+        const client = entry.client || {};
+        const contacts = entry.family || [];
+        const relationship = entry.relationship || entry.caregiver_role || "Caregiver";
+        const contactMarkup = contacts.length
+          ? contacts.map(contact=>{
+              const person = contact.person || {};
+              const phone = person.phone || "";
+              const email = person.email || "";
+              return `
+                <div class="item">
+                  <div class="line"><span>${person.name || "Name"}</span><span class="pill">${contact.relationship || contact.role}</span></div>
+                  <div class="muted">${phone || "No phone listed"} - ${email || "No email listed"}</div>
+                  <div class="contact-actions">
+                    <button data-copy="${phone}">Copy Phone</button>
+                    <button data-copy="${email}">Copy Email</button>
+                  </div>
+                </div>
+              `;
+            }).join("")
+          : `<div class="empty">No family contacts yet for this client.</div>`;
+        grid.insertAdjacentHTML("beforeend", `
+          <div class="contact-card">
+            <div class="name">${client.name || "Client"}</div>
+            <div class="labels">
+              <span class="chip">${relationship}</span>
+              <span class="chip">Family contacts: ${contacts.length}</span>
+            </div>
+            ${contactMarkup}
+          </div>
+        `);
+      });
+      grid.querySelectorAll("button[data-copy]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const value = btn.dataset.copy;
+          if(!value){ alert("No info available"); return; }
+          navigator.clipboard.writeText(value).then(()=>{
+            btn.textContent = "Copied!";
+            setTimeout(()=> btn.textContent = btn.dataset.copy.includes("@") ? "Copy Email" : "Copy Phone", 1500);
+          }).catch(()=> alert("Copy failed"));
+        });
+      });
+    }
+
+    loadData();
+
+    window.addEventListener("hashchange", ()=>{
+      const target = location.hash.replace("#","");
+      const btn = [...navButtons].find(b=>b.dataset.target===target);
+      if(btn) btn.click();
+    });
+    if(location.hash){
+      const btn = [...navButtons].find(b=>b.dataset.target===location.hash.replace("#",""));
+      if(btn) btn.click();
+    }
+  </script>
+</body>
+</html>

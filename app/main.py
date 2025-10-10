@@ -5,7 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
-from app.routers import health, memories, upload
+from app.routers import (
+    health,
+    memories,
+    upload,
+    caregivers,
+    tasks,
+    checkins,
+    alerts,
+)
 
 app = FastAPI(title="MemoryMap")
 
@@ -31,3 +39,7 @@ def _startup():
 app.include_router(health.router)
 app.include_router(memories.router)
 app.include_router(upload.router)
+app.include_router(caregivers.router)
+app.include_router(tasks.router)
+app.include_router(checkins.router)
+app.include_router(alerts.router)
